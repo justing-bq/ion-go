@@ -159,7 +159,6 @@ func NewTimestampFromStr(dateStr string, precision TimestampPrecision, kind Time
 	if precision >= TimestampPrecisionNanosecond {
 		pointIdx := strings.LastIndex(dateStr, ".")
 		if pointIdx != -1 {
-
 			idx := pointIdx + 1
 			for idx < len(dateStr) && isDigit(int(dateStr[idx])) {
 				fractionUnits++
