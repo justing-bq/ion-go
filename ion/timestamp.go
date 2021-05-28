@@ -456,35 +456,36 @@ func (ts Timestamp) String() string {
 			}
 		}
 
-		index := strings.LastIndex(format, "Z")
-		if index == -1 || index < tIndex {
-			index = strings.LastIndex(format, "+")
-			if index == -1 || index < tIndex {
-				index = strings.LastIndex(format, "-")
+		timeZoneIndex := strings.LastIndex(format, "Z")
+		if timeZoneIndex == -1 || timeZoneIndex < tIndex {
+			timeZoneIndex = strings.LastIndex(format, "+")
+			if timeZoneIndex == -1 || timeZoneIndex < tIndex {
+				timeZoneIndex = strings.LastIndex(format, "-")
 			}
 		}
 
 		// This position better be right of 'T'
-		if index != -1 && tIndex < index {
+		if timeZoneIndex != -1 && tIndex < timeZoneIndex {
 			zeros := strings.Builder{}
-			numTrailingZeros := 0
+			numZerosNeeded := 0
 
 			if ts.dateTime.Nanosecond() == 0 {
 				zeros.WriteByte('.')
-				numTrailingZeros = int(ts.numFractionalSeconds)
+				numZerosNeeded = int(ts.numFractionalSeconds)
 			} else {
-				dotIndex := strings.LastIndex(format, ".")
-				if dotIndex != -1 {
-					numTrailingZeros = int(ts.numFractionalSeconds) - (index - dotIndex) + 1
+				decimalPlaceIndex := strings.LastIndex(format, ".")
+				if decimalPlaceIndex != -1 {
+					decimalPlacesOccupied := timeZoneIndex - decimalPlaceIndex - 1
+					numZerosNeeded = int(ts.numFractionalSeconds) - decimalPlacesOccupied
 				}
 			}
 
-			// Add trailing zeros until the fractional seconds portion is correct length
-			for i := 0; i < numTrailingZeros; i++ {
+			// Add trailing zeros until the fractional seconds component is the correct length
+			for i := 0; i < numZerosNeeded; i++ {
 				zeros.WriteByte('0')
 			}
 
-			format = format[0:index] + zeros.String() + format[index:]
+			format = format[0:timeZoneIndex] + zeros.String() + format[timeZoneIndex:]
 		}
 	}
 
