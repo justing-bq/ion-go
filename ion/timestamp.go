@@ -194,7 +194,7 @@ func tryCreateDateTimestamp(year, month, day int, precision TimestampPrecision) 
 	return NewDateTimestamp(date, precision), nil
 }
 
-func tryCreateTimestamp(ts []int, nsecs int, overflow bool, offset, sign int64, precision TimestampPrecision, fractionPrecision uint8) (Timestamp, error) {
+func tryCreateTimestamp(ts []int, nsecs int, overflow bool, offset, sign int64, precision TimestampPrecision, fractionPrecisionUnits uint8) (Timestamp, error) {
 	date := time.Date(ts[0], time.Month(ts[1]), ts[2], ts[3], ts[4], ts[5], nsecs, time.UTC)
 	// time.Date converts 2000-01-32 input to 2000-02-01
 	if ts[0] != date.Year() || time.Month(ts[1]) != date.Month() || ts[2] != date.Day() {
@@ -212,17 +212,17 @@ func tryCreateTimestamp(ts []int, nsecs int, overflow bool, offset, sign int64, 
 	if offset == 0 {
 		if sign == -1 {
 			// Negative zero timezone offset is Unspecified
-			return NewTimestampWithFractionalSeconds(date, precision, TimezoneUnspecified, fractionPrecision), nil
+			return NewTimestampWithFractionalSeconds(date, precision, TimezoneUnspecified, fractionPrecisionUnits), nil
 		}
 
 		// Positive zero timezone offset is UTC
-		return NewTimestampWithFractionalSeconds(date, precision, TimezoneUTC, fractionPrecision), nil
+		return NewTimestampWithFractionalSeconds(date, precision, TimezoneUTC, fractionPrecisionUnits), nil
 	}
 
 	date = date.In(time.FixedZone("fixed", int(offset)*60))
 
 	// Non-zero offset is Local
-	return NewTimestampWithFractionalSeconds(date, precision, TimezoneLocal, fractionPrecision), nil
+	return NewTimestampWithFractionalSeconds(date, precision, TimezoneLocal, fractionPrecisionUnits), nil
 }
 
 // MustParseTimestamp parses the given string into an ion timestamp object,
