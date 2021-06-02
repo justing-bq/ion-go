@@ -159,29 +159,14 @@ func NewTimestampFromStr(dateStr string, precision TimestampPrecision, kind Time
 	if precision >= TimestampPrecisionNanosecond {
 		pointIdx := strings.LastIndex(dateStr, ".")
 		if pointIdx != -1 {
-			nonZeroFraction := false
-
 			idx := pointIdx + 1
 			for idx < len(dateStr) && isDigit(int(dateStr[idx])) {
-				if dateStr[idx] != '0' {
-					nonZeroFraction = true
-				}
 				fractionUnits++
 				idx++
 			}
 
 			if idx == len(dateStr) {
 				return Timestamp{}, fmt.Errorf("ion: invalid date string '%v'", dateStr)
-			}
-
-			// We do not want to include trailing zeros for a non-zero fraction (ie. .1234000 -> .1234)
-			// So we adjust fractionUnits accordingly.
-			if nonZeroFraction {
-				idx--
-				for idx > pointIdx && dateStr[idx] == '0' {
-					fractionUnits--
-					idx--
-				}
 			}
 		}
 	}
@@ -209,7 +194,7 @@ func tryCreateDateTimestamp(year, month, day int, precision TimestampPrecision) 
 	return NewDateTimestamp(date, precision), nil
 }
 
-func tryCreateTimestamp(ts []int, nsecs int, overflow bool, offset, sign int64, precision TimestampPrecision, fractionPrecision uint8) (Timestamp, error) {
+func tryCreateTimestamp(ts []int, nsecs int, overflow bool, offset, sign int64, precision TimestampPrecision, fractionPrecisionUnits uint8) (Timestamp, error) {
 	date := time.Date(ts[0], time.Month(ts[1]), ts[2], ts[3], ts[4], ts[5], nsecs, time.UTC)
 	// time.Date converts 2000-01-32 input to 2000-02-01
 	if ts[0] != date.Year() || time.Month(ts[1]) != date.Month() || ts[2] != date.Day() {
@@ -227,17 +212,17 @@ func tryCreateTimestamp(ts []int, nsecs int, overflow bool, offset, sign int64, 
 	if offset == 0 {
 		if sign == -1 {
 			// Negative zero timezone offset is Unspecified
-			return NewTimestampWithFractionalSeconds(date, precision, TimezoneUnspecified, fractionPrecision), nil
+			return NewTimestampWithFractionalSeconds(date, precision, TimezoneUnspecified, fractionPrecisionUnits), nil
 		}
 
 		// Positive zero timezone offset is UTC
-		return NewTimestampWithFractionalSeconds(date, precision, TimezoneUTC, fractionPrecision), nil
+		return NewTimestampWithFractionalSeconds(date, precision, TimezoneUTC, fractionPrecisionUnits), nil
 	}
 
 	date = date.In(time.FixedZone("fixed", int(offset)*60))
 
 	// Non-zero offset is Local
-	return NewTimestampWithFractionalSeconds(date, precision, TimezoneLocal, fractionPrecision), nil
+	return NewTimestampWithFractionalSeconds(date, precision, TimezoneLocal, fractionPrecisionUnits), nil
 }
 
 // MustParseTimestamp parses the given string into an ion timestamp object,
@@ -461,7 +446,7 @@ func (ts Timestamp) String() string {
 	// So we may need to make some adjustments.
 
 	// Add back removed trailing zeros from fractional seconds (ie. ".000")
-	if ts.precision >= TimestampPrecisionNanosecond && ts.dateTime.Nanosecond() == 0 && ts.numFractionalSeconds > 0 {
+	if ts.precision >= TimestampPrecisionNanosecond && ts.numFractionalSeconds > 0 {
 		// Find the position of 'T'
 		tIndex := strings.Index(format, "T")
 		if tIndex == -1 {
@@ -471,23 +456,36 @@ func (ts Timestamp) String() string {
 			}
 		}
 
-		index := strings.LastIndex(format, "Z")
-		if index == -1 || index < tIndex {
-			index = strings.LastIndex(format, "+")
-			if index == -1 || index < tIndex {
-				index = strings.LastIndex(format, "-")
+		timeZoneIndex := strings.LastIndex(format, "Z")
+		if timeZoneIndex == -1 || timeZoneIndex < tIndex {
+			timeZoneIndex = strings.LastIndex(format, "+")
+			if timeZoneIndex == -1 || timeZoneIndex < tIndex {
+				timeZoneIndex = strings.LastIndex(format, "-")
 			}
 		}
 
 		// This position better be right of 'T'
-		if index != -1 && tIndex < index {
+		if timeZoneIndex != -1 && tIndex < timeZoneIndex {
 			zeros := strings.Builder{}
-			zeros.WriteByte('.')
-			for i := uint8(0); i < ts.numFractionalSeconds; i++ {
+			numZerosNeeded := 0
+
+			if ts.dateTime.Nanosecond() == 0 {
+				zeros.WriteByte('.')
+				numZerosNeeded = int(ts.numFractionalSeconds)
+			} else {
+				decimalPlaceIndex := strings.LastIndex(format, ".")
+				if decimalPlaceIndex != -1 {
+					decimalPlacesOccupied := timeZoneIndex - decimalPlaceIndex - 1
+					numZerosNeeded = int(ts.numFractionalSeconds) - decimalPlacesOccupied
+				}
+			}
+
+			// Add trailing zeros until the fractional seconds component is the correct length
+			for i := 0; i < numZerosNeeded; i++ {
 				zeros.WriteByte('0')
 			}
 
-			format = format[0:index] + zeros.String() + format[index:]
+			format = format[0:timeZoneIndex] + zeros.String() + format[timeZoneIndex:]
 		}
 	}
 
